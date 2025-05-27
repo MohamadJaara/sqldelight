@@ -103,7 +103,7 @@ abstract class QueryGenerator(
     return result.build()
   }
 
-  private fun executeBlock(
+  internal fun executeBlock(
     statement: PsiElement,
     handledArrayArgs: Set<BindableQuery.Argument>,
     id: Int,

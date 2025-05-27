@@ -814,6 +814,23 @@ class QueriesTypeTest {
       |      cursor.getBytes(3)?.let { soupAdapter.soup_nameAdapter.decode(it) }
       |    )
       |  }
+      |  public fun <T : Any> forSoupToken(
+      |    soup_token: String,
+      |    mapper: (
+      |      token: String,
+      |      soup_token: String,
+      |      soup_broth: ChickenSoupBase.Broth?,
+      |      soup_name: ChickenSoup.SoupName?,
+      |    ) -> T,
+      |    customKeys: List<String>,
+      |  ): Query<T> = ForSoupTokenQueryWithCustomKeys(soup_token, customKeys) { cursor ->
+      |    mapper(
+      |      cursor.getString(0)!!,
+      |      cursor.getString(1)!!,
+      |      cursor.getBytes(2)?.let { soupBaseAdapter.soup_brothAdapter.decode(it) },
+      |      cursor.getBytes(3)?.let { soupAdapter.soup_nameAdapter.decode(it) }
+      |    )
+      |  }
       |
       |  public fun forSoupToken(soup_token: String): Query<SoupView> = forSoupToken(soup_token) { token,
       |      soup_token_, soup_broth, soup_name ->
@@ -961,6 +978,8 @@ class QueriesTypeTest {
         import app.cash.sqldelight.db.QueryResult
         import app.cash.sqldelight.db.SqlDriver
         import kotlin.Long
+        import kotlin.String
+        import kotlin.collections.List
 
         public class TestQueries(
           driver: SqlDriver,
@@ -974,6 +993,19 @@ class QueriesTypeTest {
                 }
             notifyQueries(-304_025_397) { emit ->
               emit("order")
+            }
+            return result
+          }
+
+          /**
+           * @return The number of rows updated.
+           */
+          public fun selectForId(order: Order, customKeys: List<String>): QueryResult<Long> {
+            val result = driver.execute(-304_025_397, ""${'"'}INSERT INTO "order" (data_id) VALUES (?)""${'"'}, 1) {
+                  bindLong(0, order.data_id)
+                }
+            notifyQueries(-304_025_397) { emit ->
+              customKeys.forEach { emit(it) }
             }
             return result
           }
@@ -1007,6 +1039,8 @@ class QueriesTypeTest {
         import app.cash.sqldelight.db.QueryResult
         import app.cash.sqldelight.db.SqlDriver
         import kotlin.Long
+        import kotlin.String
+        import kotlin.collections.List
 
         public class TestQueries(
           driver: SqlDriver,
@@ -1022,6 +1056,21 @@ class QueriesTypeTest {
                 }
             notifyQueries(-1_876_170_987) { emit ->
               emit("Examples")
+            }
+            return result
+          }
+
+          /**
+           * @return The number of rows updated.
+           */
+          public fun insertObject(Examples: Examples, customKeys: List<String>): QueryResult<Long> {
+            val result = driver.execute(-1_876_170_987,
+                ""${'"'}INSERT INTO Examples (id, `index`) VALUES (?, ?)""${'"'}, 2) {
+                  bindString(0, Examples.id)
+                  bindLong(1, Examples.index)
+                }
+            notifyQueries(-1_876_170_987) { emit ->
+              customKeys.forEach { emit(it) }
             }
             return result
           }

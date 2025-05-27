@@ -56,13 +56,16 @@ class QueriesTypeGenerator(
         val generator = SelectQueryGenerator(query)
 
         type.addFunction(generator.customResultTypeFunction())
+        type.addFunction(generator.customResultTypeFunctionWithCustomKeys())
 
         if (query.needsWrapper()) {
           type.addFunction(generator.defaultResultTypeFunction())
+          type.addFunction(generator.defaultResultTypeFunctionWithCustomKeys())
         }
 
         if (query.needsQuerySubType()) {
           type.addType(generator.querySubtype())
+          type.addType(generator.querySubtypeWithCustomKeys())
         }
       }
     }
@@ -88,6 +91,7 @@ class QueriesTypeGenerator(
       }
 
       addFunction(generator.function())
+      addFunction(generator.functionWithCustomKeys())
     }
   }
 }
