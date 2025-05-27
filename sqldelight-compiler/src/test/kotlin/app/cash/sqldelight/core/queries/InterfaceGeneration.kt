@@ -854,6 +854,7 @@ class InterfaceGeneration {
       |import kotlin.Any
       |import kotlin.Long
       |import kotlin.String
+      |import kotlin.collections.List
       |
       |public class SongQueries(
       |  driver: SqlDriver,
@@ -870,8 +871,33 @@ class InterfaceGeneration {
       |    )
       |  }
       |
+      |  public fun <T : Any> selectSongsByAlbumId(
+      |    album_id: Long?,
+      |    mapper: (
+      |      title: String?,
+      |      track_number: Long?,
+      |      album_id: Long?,
+      |    ) -> T,
+      |    customKeys: List<String>,
+      |  ): Query<T> = SelectSongsByAlbumIdQueryWithCustomKeys(album_id, customKeys) { cursor ->
+      |    mapper(
+      |      cursor.getString(0),
+      |      cursor.getLong(1),
+      |      cursor.getLong(2)
+      |    )
+      |  }
+      |
       |  public fun selectSongsByAlbumId(album_id: Long?): Query<Song> = selectSongsByAlbumId(album_id) {
       |      title, track_number, album_id_ ->
+      |    Song(
+      |      title,
+      |      track_number,
+      |      album_id_
+      |    )
+      |  }
+      |
+      |  public fun selectSongsByAlbumId(album_id: Long?, customKeys: List<String>): Query<Song> =
+      |      selectSongsByAlbumIdWithCustomKeys(album_id, customKeys) { title, track_number, album_id_ ->
       |    Song(
       |      title,
       |      track_number,
@@ -889,6 +915,29 @@ class InterfaceGeneration {
       |
       |    override fun removeListener(listener: Query.Listener) {
       |      driver.removeListener("song", listener = listener)
+      |    }
+      |
+      |    override fun <R> execute(mapper: (SqlCursor) -> QueryResult<R>): QueryResult<R> =
+      |        driver.executeQuery(null,
+      |        ""${'"'}SELECT song.title, song.track_number, song.album_id FROM song WHERE album_id ${'$'}{ if (album_id == null) "IS" else "=" } ?""${'"'},
+      |        mapper, 1) {
+      |      bindLong(0, album_id)
+      |    }
+      |
+      |    override fun toString(): String = "song.sq:selectSongsByAlbumId"
+      |  }
+      |
+      |  private inner class SelectSongsByAlbumIdQueryWithCustomKeys<out T : Any>(
+      |    public val album_id: Long?,
+      |    public val customKeys: List<String>,
+      |    mapper: (SqlCursor) -> T,
+      |  ) : Query<T>(mapper) {
+      |    override fun addListener(listener: Query.Listener) {
+      |      driver.addListener(*customKeys.toTypedArray(), listener = listener)
+      |    }
+      |
+      |    override fun removeListener(listener: Query.Listener) {
+      |      driver.removeListener(*customKeys.toTypedArray(), listener = listener)
       |    }
       |
       |    override fun <R> execute(mapper: (SqlCursor) -> QueryResult<R>): QueryResult<R> =
@@ -955,12 +1004,19 @@ class InterfaceGeneration {
       |import kotlin.Int
       |import kotlin.Long
       |import kotlin.String
+      |import kotlin.collections.List
       |
       |public class SubscriptionQueries(
       |  driver: SqlDriver,
       |) : TransacterImpl(driver) {
       |  public fun insertUser(slack_user_id: String): Query<Int> = InsertUserQuery(slack_user_id) {
       |      cursor ->
+      |    check(cursor is JdbcCursor)
+      |    cursor.getInt(0)!!
+      |  }
+      |
+      |  public fun insertUser(slack_user_id: String, customKeys: List<String>): Query<Int> =
+      |      InsertUserQueryWithCustomKeys(slack_user_id, customKeys) { cursor ->
       |    check(cursor is JdbcCursor)
       |    cursor.getInt(0)!!
       |  }
@@ -992,6 +1048,34 @@ class InterfaceGeneration {
       |
       |    override fun removeListener(listener: Query.Listener) {
       |      driver.removeListener("userEntity", listener = listener)
+      |    }
+      |
+      |    override fun <R> execute(mapper: (SqlCursor) -> QueryResult<R>): QueryResult<R> =
+      |        driver.executeQuery(${result.compiledFile.namedQueries[0].id.withUnderscores}, ""${'"'}
+      |    |WITH inserted_ids AS (
+      |    |  INSERT INTO userEntity(slack_user_id)
+      |    |  VALUES (?)
+      |    |  RETURNING user_id AS insert_id
+      |    |) SELECT insert_id FROM inserted_ids
+      |    ""${'"'}.trimMargin(), mapper, 1) {
+      |      check(this is JdbcPreparedStatement)
+      |      bindString(0, slack_user_id)
+      |    }
+      |
+      |    override fun toString(): String = "Subscription.sq:insertUser"
+      |  }
+      |
+      |  private inner class InsertUserQueryWithCustomKeys<out T : Any>(
+      |    public val slack_user_id: String,
+      |    customKeys: List<String>,
+      |    mapper: (SqlCursor) -> T,
+      |  ) : Query<T>(mapper) {
+      |    override fun addListener(listener: Query.Listener) {
+      |      driver.addListener(customKeys, listener = listener)
+      |    }
+      |
+      |    override fun removeListener(listener: Query.Listener) {
+      |      driver.removeListener(customKeys, listener = listener)
       |    }
       |
       |    override fun <R> execute(mapper: (SqlCursor) -> QueryResult<R>): QueryResult<R> =
@@ -1075,12 +1159,24 @@ class InterfaceGeneration {
       |import kotlin.Any
       |import kotlin.Long
       |import kotlin.String
+      |import kotlin.collections.List
       |
       |public class RecursiveQueries(
       |  driver: SqlDriver,
       |) : TransacterImpl(driver) {
       |  public fun <T : Any> recursiveQuery(id: Long, mapper: (id: Long, parent_id: Long?) -> T): Query<T>
       |      = RecursiveQueryQuery(id) { cursor ->
+      |    mapper(
+      |      cursor.getLong(0)!!,
+      |      cursor.getLong(1)
+      |    )
+      |  }
+      |
+      |  public fun <T : Any> recursiveQuery(
+      |    id: Long,
+      |    mapper: (id: Long, parent_id: Long?) -> T,
+      |    customKeys: List<String>,
+      |  ): Query<T> = RecursiveQueryQueryWithCustomKeys(id, customKeys) { cursor ->
       |    mapper(
       |      cursor.getLong(0)!!,
       |      cursor.getLong(1)
@@ -1095,6 +1191,14 @@ class InterfaceGeneration {
       |    )
       |  }
       |
+      |  public fun recursiveQuery(id: Long, customKeys: List<String>): Query<RecursiveQuery> =
+      |      recursiveQuery(id, { id_, parent_id ->
+      |    RecursiveQuery(
+      |      id_,
+      |      parent_id
+      |    )
+      |  }, customKeys)
+      |
       |  private inner class RecursiveQueryQuery<out T : Any>(
       |    public val id: Long,
       |    mapper: (SqlCursor) -> T,
@@ -1105,6 +1209,40 @@ class InterfaceGeneration {
       |
       |    override fun removeListener(listener: Query.Listener) {
       |      driver.removeListener("item", listener = listener)
+      |    }
+      |
+      |    override fun <R> execute(mapper: (SqlCursor) -> QueryResult<R>): QueryResult<R> =
+      |        driver.executeQuery(${query.id.withUnderscores}, ""${'"'}
+      |    |WITH RECURSIVE
+      |    |descendants AS (
+      |    |    SELECT id, parent_id
+      |    |    FROM item
+      |    |    WHERE item.id = ?
+      |    |    UNION ALL
+      |    |    SELECT item.id, item.parent_id
+      |    |    FROM item, descendants
+      |    |    WHERE item.id = descendants.parent_id
+      |    |)
+      |    |SELECT descendants.id, descendants.parent_id
+      |    |FROM descendants
+      |    ""${'"'}.trimMargin(), mapper, 1) {
+      |      bindLong(0, id)
+      |    }
+      |
+      |    override fun toString(): String = "Recursive.sq:recursiveQuery"
+      |  }
+      |
+      |  private inner class RecursiveQueryQueryWithCustomKeys<out T : Any>(
+      |    public val id: Long,
+      |    customKeys: List<String>,
+      |    mapper: (SqlCursor) -> T,
+      |  ) : Query<T>(mapper) {
+      |    override fun addListener(listener: Query.Listener) {
+      |      driver.addListener(customKeys, listener = listener)
+      |    }
+      |
+      |    override fun removeListener(listener: Query.Listener) {
+      |      driver.removeListener(customKeys, listener = listener)
       |    }
       |
       |    override fun <R> execute(mapper: (SqlCursor) -> QueryResult<R>): QueryResult<R> =
@@ -1170,6 +1308,7 @@ class InterfaceGeneration {
       |import kotlin.Any
       |import kotlin.Long
       |import kotlin.String
+      |import kotlin.collections.List
       |
       |public class WindowsFunctionsQueries(
       |  driver: SqlDriver,
@@ -1190,7 +1329,32 @@ class InterfaceGeneration {
       |    )
       |  }
       |
+      |  public fun <T : Any> selectRank(mapper: (name: String, rank: Long) -> T,
+      |      customKeys: List<String>): Query<T> = Query(-1_725_152_245, customKeys.toTypedArray(), driver,
+      |      "WindowsFunctions.sq", "selectRank", ""${'"'}
+      |  |SELECT
+      |  |  name,
+      |  |  RANK () OVER (
+      |  |  ORDER BY points DESC
+      |  |  ) rank
+      |  |FROM scores
+      |  ""${'"'}.trimMargin()) { cursor ->
+      |    check(cursor is JdbcCursor)
+      |    mapper(
+      |      cursor.getString(0)!!,
+      |      cursor.getLong(1)!!
+      |    )
+      |  }
+      |
       |  public fun selectRank(): Query<SelectRank> = selectRank { name, rank ->
+      |    SelectRank(
+      |      name,
+      |      rank
+      |    )
+      |  }
+      |
+      |  public fun selectRank(customKeys: List<String>): Query<SelectRank> =
+      |      selectRankWithCustomKeys(customKeys) { name, rank ->
       |    SelectRank(
       |      name,
       |      rank
@@ -1262,6 +1426,8 @@ class InterfaceGeneration {
     |import app.cash.sqldelight.driver.jdbc.JdbcCursor
     |import kotlin.Any
     |import kotlin.Boolean
+    |import kotlin.String
+    |import kotlin.collections.List
     |
     |public class SqlIsExprQueries(
     |  driver: SqlDriver,
@@ -1322,9 +1488,88 @@ class InterfaceGeneration {
     |    )
     |  }
     |
+    |  public fun <T : Any> selectIsNotNull(mapper: (
+    |    has_bigint: Boolean,
+    |    has_boolean: Boolean,
+    |    has_byte: Boolean,
+    |    has_date: Boolean,
+    |    has_integer: Boolean,
+    |    has_json: Boolean,
+    |    has_jsob: Boolean,
+    |    has_num: Boolean,
+    |    has_smallint: Boolean,
+    |    has_time: Boolean,
+    |    has_timestamp: Boolean,
+    |    has_timestamptz: Boolean,
+    |    has_tsvector: Boolean,
+    |    has_uuid: Boolean,
+    |    has_varchar: Boolean,
+    |  ) -> T, customKeys: List<String>): Query<T> = Query(-1_574_646_250, customKeys.toTypedArray(),
+    |      driver, "SqlIsExpr.sq", "selectIsNotNull", ""${'"'}
+    |  |SELECT
+    |  |big IS NOT NULL AS has_bigint,
+    |  |bol IS NOT NULL AS has_boolean,
+    |  |byt IS NOT NULL AS has_byte,
+    |  |dte IS NOT NULL AS has_date,
+    |  |inr IS NOT NULL AS has_integer,
+    |  |jsn IS NOT NULL AS has_json,
+    |  |jsb IS NOT NULL AS has_jsob,
+    |  |num IS NOT NULL AS has_num,
+    |  |sml IS NOT NULL AS has_smallint,
+    |  |tim IS NOT NULL AS has_time,
+    |  |tms IS NOT NULL AS has_timestamp,
+    |  |tmz IS NOT NULL AS has_timestamptz,
+    |  |tsv IS NOT NULL AS has_tsvector,
+    |  |uui IS NOT NULL AS has_uuid,
+    |  |var IS NULL AS has_varchar
+    |  |FROM test
+    |  ""${'"'}.trimMargin()) { cursor ->
+    |    check(cursor is JdbcCursor)
+    |    mapper(
+    |      cursor.getBoolean(0)!!,
+    |      cursor.getBoolean(1)!!,
+    |      cursor.getBoolean(2)!!,
+    |      cursor.getBoolean(3)!!,
+    |      cursor.getBoolean(4)!!,
+    |      cursor.getBoolean(5)!!,
+    |      cursor.getBoolean(6)!!,
+    |      cursor.getBoolean(7)!!,
+    |      cursor.getBoolean(8)!!,
+    |      cursor.getBoolean(9)!!,
+    |      cursor.getBoolean(10)!!,
+    |      cursor.getBoolean(11)!!,
+    |      cursor.getBoolean(12)!!,
+    |      cursor.getBoolean(13)!!,
+    |      cursor.getBoolean(14)!!
+    |    )
+    |  }
+    |
     |  public fun selectIsNotNull(): Query<SelectIsNotNull> = selectIsNotNull { has_bigint, has_boolean,
     |      has_byte, has_date, has_integer, has_json, has_jsob, has_num, has_smallint, has_time,
     |      has_timestamp, has_timestamptz, has_tsvector, has_uuid, has_varchar ->
+    |    SelectIsNotNull(
+    |      has_bigint,
+    |      has_boolean,
+    |      has_byte,
+    |      has_date,
+    |      has_integer,
+    |      has_json,
+    |      has_jsob,
+    |      has_num,
+    |      has_smallint,
+    |      has_time,
+    |      has_timestamp,
+    |      has_timestamptz,
+    |      has_tsvector,
+    |      has_uuid,
+    |      has_varchar
+    |    )
+    |  }
+    |
+    |  public fun selectIsNotNull(customKeys: List<String>): Query<SelectIsNotNull> =
+    |      selectIsNotNullWithCustomKeys(customKeys) { has_bigint, has_boolean, has_byte, has_date,
+    |      has_integer, has_json, has_jsob, has_num, has_smallint, has_time, has_timestamp,
+    |      has_timestamptz, has_tsvector, has_uuid, has_varchar ->
     |    SelectIsNotNull(
     |      has_bigint,
     |      has_boolean,
@@ -1501,6 +1746,8 @@ class InterfaceGeneration {
     |import java.math.BigDecimal
     |import kotlin.Any
     |import kotlin.Int
+    |import kotlin.String
+    |import kotlin.collections.List
     |
     |public class LateralQueries(
     |  driver: SqlDriver,
@@ -1542,7 +1789,62 @@ class InterfaceGeneration {
     |    )
     |  }
     |
+    |  public fun <T : Any> select(mapper: (
+    |    p: Int?,
+    |    f: BigDecimal?,
+    |    b: Int?,
+    |    l: BigDecimal?,
+    |    d: BigDecimal?,
+    |    g: Int?,
+    |    pf: BigDecimal?,
+    |    pfb: BigDecimal?,
+    |    gf: BigDecimal?,
+    |    gfpf: BigDecimal?,
+    |    dl: BigDecimal?,
+    |  ) -> T, customKeys: List<String>): Query<T> = Query(89_549_764, customKeys.toTypedArray(), driver,
+    |      "Lateral.sq", "select", ""${'"'}
+    |  |SELECT Test.p, Test.f, Test.b, Test.l, Test.d, Test.g, pf, pfb, gf, gfpf, dl
+    |  |FROM Test,
+    |  |LATERAL (SELECT p / f AS pf) _pf,
+    |  |LATERAL (SELECT pf / b AS pfb) _pfb,
+    |  |LATERAL (SELECT g / f AS gf) _gf,
+    |  |LATERAL (SELECT gf - pf AS gfpf) _gfpf,
+    |  |LATERAL (SELECT (d - l) / 60000.00 AS dl) _dl
+    |  ""${'"'}.trimMargin()) { cursor ->
+    |    check(cursor is JdbcCursor)
+    |    mapper(
+    |      cursor.getInt(0),
+    |      cursor.getBigDecimal(1),
+    |      cursor.getInt(2),
+    |      cursor.getBigDecimal(3),
+    |      cursor.getBigDecimal(4),
+    |      cursor.getInt(5),
+    |      cursor.getBigDecimal(6),
+    |      cursor.getBigDecimal(7),
+    |      cursor.getBigDecimal(8),
+    |      cursor.getBigDecimal(9),
+    |      cursor.getBigDecimal(10)
+    |    )
+    |  }
+    |
     |  public fun select(): Query<Select> = select { p, f, b, l, d, g, pf, pfb, gf, gfpf, dl ->
+    |    Select(
+    |      p,
+    |      f,
+    |      b,
+    |      l,
+    |      d,
+    |      g,
+    |      pf,
+    |      pfb,
+    |      gf,
+    |      gfpf,
+    |      dl
+    |    )
+    |  }
+    |
+    |  public fun select(customKeys: List<String>): Query<Select> = selectWithCustomKeys(customKeys) { p,
+    |      f, b, l, d, g, pf, pfb, gf, gfpf, dl ->
     |    Select(
     |      p,
     |      f,

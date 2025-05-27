@@ -146,6 +146,17 @@ class QueriesTypeTest {
       |    )
       |  }
       |
+      |  public fun <T : Any> selectForId(
+      |    id: Long,
+      |    mapper: (id: Long, value_: List?) -> T,
+      |    customKeys: List<String>,
+      |  ): Query<T> = SelectForIdQueryWithCustomKeys(id, customKeys) { cursor ->
+      |    mapper(
+      |      cursor.getLong(0)!!,
+      |      cursor.getString(1)?.let { data_Adapter.value_Adapter.decode(it) }
+      |    )
+      |  }
+      |
       |  public fun selectForId(id: Long): Query<Data_> = selectForId(id) { id_, value_ ->
       |    Data_(
       |      id_,
@@ -153,8 +164,16 @@ class QueriesTypeTest {
       |    )
       |  }
       |
+      |  public fun selectForId(id: Long, customKeys: List<String>): Query<Data_> =
+      |      selectForIdWithCustomKeys(id, customKeys) { id_, value_ ->
+      |    Data_(
+      |      id_,
+      |      value_
+      |    )
+      |  }
+      |
       |  public fun <T : Any> selectAllValues(mapper: (id: Long, value_: List?) -> T): Query<T> {
-      |    check(setOf(dataAdapter.value_Adapter, otherAdapter.value_Adapter).size == 1) {
+      |    check(setOf(data_Adapter.value_Adapter, otherAdapter.value_Adapter).size == 1) {
       |        "Adapter types are expected to be identical." }
       |    return Query(424_911_250, arrayOf("data", "other"), driver, "Data.sq", "selectAllValues", ""${'"'}
       |    |SELECT id, value FROM data
@@ -168,7 +187,31 @@ class QueriesTypeTest {
       |    }
       |  }
       |
+      |  public fun <T : Any> selectAllValues(mapper: (id: Long, value_: List?) -> T,
+      |      customKeys: List<String>): Query<T> {
+      |    check(setOf(data_Adapter.value_Adapter, otherAdapter.value_Adapter).size == 1) {
+      |        "Adapter types are expected to be identical." }
+      |    return Query(424_911_250, customKeys.toTypedArray(), driver, "Data.sq", "selectAllValues", ""${'"'}
+      |    |SELECT id, value FROM data
+      |    |UNION
+      |    |SELECT id, value FROM other
+      |    ""${'"'}.trimMargin()) { cursor ->
+      |      mapper(
+      |        cursor.getLong(0)!!,
+      |        cursor.getString(1)?.let { data_Adapter.value_Adapter.decode(it) }
+      |      )
+      |    }
+      |  }
+      |
       |  public fun selectAllValues(): Query<SelectAllValues> = selectAllValues { id, value_ ->
+      |    SelectAllValues(
+      |      id,
+      |      value_
+      |    )
+      |  }
+      |
+      |  public fun selectAllValues(customKeys: List<String>): Query<SelectAllValues> =
+      |      selectAllValuesWithCustomKeys(customKeys) { id, value_ ->
       |    SelectAllValues(
       |      id,
       |      value_
@@ -192,6 +235,27 @@ class QueriesTypeTest {
       |    return result
       |  }
       |
+      |  /**
+      |   * @return The number of rows updated.
+      |   */
+      |  public fun insertData(
+      |    id: Long?,
+      |    value_: List?,
+      |    customKeys: List<String>,
+      |  ): QueryResult<Long> {
+      |    val result = driver.execute(${insert.id.withUnderscores}, ""${'"'}
+      |        |INSERT INTO data
+      |        |VALUES (?, ?)
+      |        ""${'"'}.trimMargin(), 2) {
+      |          bindLong(0, id)
+      |          bindString(1, value_?.let { data_Adapter.value_Adapter.encode(it) })
+      |        }
+      |    notifyQueries(${insert.id.withUnderscores}) { emit ->
+      |      customKeys.forEach { emit(it) }
+      |    }
+      |    return result
+      |  }
+      |
       |  private inner class SelectForIdQuery<out T : Any>(
       |    public val id: Long,
       |    mapper: (SqlCursor) -> T,
@@ -202,6 +266,31 @@ class QueriesTypeTest {
       |
       |    override fun removeListener(listener: Query.Listener) {
       |      driver.removeListener("data", listener = listener)
+      |    }
+      |
+      |    override fun <R> execute(mapper: (SqlCursor) -> QueryResult<R>): QueryResult<R> =
+      |        driver.executeQuery(${select.id.withUnderscores}, ""${'"'}
+      |    |SELECT data.id, data.value
+      |    |FROM data
+      |    |WHERE id = ?
+      |    ""${'"'}.trimMargin(), mapper, 1) {
+      |      bindLong(0, id)
+      |    }
+      |
+      |    override fun toString(): String = "Data.sq:selectForId"
+      |  }
+      |
+      |  private inner class SelectForIdQueryWithCustomKeys<out T : Any>(
+      |    public val id: Long,
+      |    public val customKeys: List<String>,
+      |    mapper: (SqlCursor) -> T,
+      |  ) : Query<T>(mapper) {
+      |    override fun addListener(listener: Query.Listener) {
+      |      driver.addListener(*customKeys.toTypedArray(), listener = listener)
+      |    }
+      |
+      |    override fun removeListener(listener: Query.Listener) {
+      |      driver.removeListener(*customKeys.toTypedArray(), listener = listener)
       |    }
       |
       |    override fun <R> execute(mapper: (SqlCursor) -> QueryResult<R>): QueryResult<R> =
@@ -309,6 +398,8 @@ class QueriesTypeTest {
       |import app.cash.sqldelight.db.QueryResult
       |import app.cash.sqldelight.db.SqlDriver
       |import kotlin.Long
+      |import kotlin.String
+      |import kotlin.collections.List
       |
       |public class DataQueries(
       |  driver: SqlDriver,
@@ -327,6 +418,23 @@ class QueriesTypeTest {
       |        }
       |    notifyQueries(${insert.id.withUnderscores}) { emit ->
       |      emit("data")
+      |    }
+      |    return result
+      |  }
+      |
+      |  /**
+      |   * @return The number of rows updated.
+      |   */
+      |  public fun insertData(data_: Data_, customKeys: List<String>): QueryResult<Long> {
+      |    val result = driver.execute(${insert.id.withUnderscores}, ""${'"'}
+      |        |INSERT INTO data (id, value)
+      |        |VALUES (?, ?)
+      |        ""${'"'}.trimMargin(), 2) {
+      |          bindLong(0, data_.id)
+      |          bindString(1, data_.value_?.let { data_Adapter.value_Adapter.encode(it) })
+      |        }
+      |    notifyQueries(${insert.id.withUnderscores}) { emit ->
+      |      customKeys.forEach { emit(it) }
       |    }
       |    return result
       |  }
@@ -791,6 +899,7 @@ class QueriesTypeTest {
       |import app.cash.sqldelight.db.SqlDriver
       |import kotlin.Any
       |import kotlin.String
+      |import kotlin.collections.List
       |import com.chicken.SoupBase as ChickenSoupBase
       |import com.chicken.Soup as ChickenSoup
       |import com.example.db.SoupBase as DbSoupBase
@@ -814,6 +923,7 @@ class QueriesTypeTest {
       |      cursor.getBytes(3)?.let { soupAdapter.soup_nameAdapter.decode(it) }
       |    )
       |  }
+      |
       |  public fun <T : Any> forSoupToken(
       |    soup_token: String,
       |    mapper: (
@@ -842,6 +952,17 @@ class QueriesTypeTest {
       |    )
       |  }
       |
+      |  public fun forSoupToken(soup_token: String, customKeys: List<String>): Query<SoupView> =
+      |      forSoupTokenWithCustomKeys(soup_token, customKeys) { token, soup_token_, soup_broth,
+      |      soup_name ->
+      |    SoupView(
+      |      token,
+      |      soup_token_,
+      |      soup_broth,
+      |      soup_name
+      |    )
+      |  }
+      |
       |  public fun <T : Any> maxSoupBroth(mapper: (MAX: ChickenSoupBase.Broth?) -> T): Query<T> =
       |      Query(-1_892_940_684, arrayOf("soupBase", "soup"), driver, "MyView.sq", "maxSoupBroth", ""${'"'}
       |  |SELECT MAX(soup_broth)
@@ -852,7 +973,25 @@ class QueriesTypeTest {
       |    )
       |  }
       |
+      |  public fun <T : Any> maxSoupBroth(mapper: (MAX: ChickenSoupBase.Broth?) -> T,
+      |      customKeys: List<String>): Query<T> = Query(-1_892_940_684, customKeys.toTypedArray(), driver,
+      |      "MyView.sq", "maxSoupBroth", ""${'"'}
+      |  |SELECT MAX(soup_broth)
+      |  |FROM soupView
+      |  ""${'"'}.trimMargin()) { cursor ->
+      |    mapper(
+      |      cursor.getBytes(0)?.let { soupBaseAdapter.soup_brothAdapter.decode(it) }
+      |    )
+      |  }
+      |
       |  public fun maxSoupBroth(): Query<MaxSoupBroth> = maxSoupBroth { MAX ->
+      |    MaxSoupBroth(
+      |      MAX
+      |    )
+      |  }
+      |
+      |  public fun maxSoupBroth(customKeys: List<String>): Query<MaxSoupBroth> =
+      |      maxSoupBrothWithCustomKeys(customKeys) { MAX ->
       |    MaxSoupBroth(
       |      MAX
       |    )
@@ -868,6 +1007,31 @@ class QueriesTypeTest {
       |
       |    override fun removeListener(listener: Query.Listener) {
       |      driver.removeListener("soupBase", "soup", listener = listener)
+      |    }
+      |
+      |    override fun <R> execute(mapper: (SqlCursor) -> QueryResult<R>): QueryResult<R> =
+      |        driver.executeQuery(-988_424_235, ""${'"'}
+      |    |SELECT soupView.token, soupView.soup_token, soupView.soup_broth, soupView.soup_name
+      |    |FROM soupView
+      |    |WHERE soup_token = ?
+      |    ""${'"'}.trimMargin(), mapper, 1) {
+      |      bindString(0, soup_token)
+      |    }
+      |
+      |    override fun toString(): String = "MyView.sq:forSoupToken"
+      |  }
+      |
+      |  private inner class ForSoupTokenQueryWithCustomKeys<out T : Any>(
+      |    public val soup_token: String,
+      |    public val customKeys: List<String>,
+      |    mapper: (SqlCursor) -> T,
+      |  ) : Query<T>(mapper) {
+      |    override fun addListener(listener: Query.Listener) {
+      |      driver.addListener(*customKeys.toTypedArray(), listener = listener)
+      |    }
+      |
+      |    override fun removeListener(listener: Query.Listener) {
+      |      driver.removeListener(*customKeys.toTypedArray(), listener = listener)
       |    }
       |
       |    override fun <R> execute(mapper: (SqlCursor) -> QueryResult<R>): QueryResult<R> =
@@ -1105,12 +1269,19 @@ class QueriesTypeTest {
       |import app.cash.sqldelight.TransacterImpl
       |import app.cash.sqldelight.db.SqlDriver
       |import kotlin.String
+      |import kotlin.collections.List
       |
       |public class DataQueries(
       |  driver: SqlDriver,
       |) : TransacterImpl(driver) {
       |  public fun pragmaVersion(): ExecutableQuery<String> = Query(${query.id.withUnderscores}, driver, "Data.sq",
       |      "pragmaVersion", "PRAGMA get_version") { cursor ->
+      |    cursor.getString(0)!!
+      |  }
+      |
+      |  public fun pragmaVersion(customKeys: List<String>): ExecutableQuery<String> = Query(${query.id.withUnderscores},
+      |      customKeys.toTypedArray(), driver, "Data.sq", "pragmaVersion", "PRAGMA get_version") {
+      |      cursor ->
       |    cursor.getString(0)!!
       |  }
       |}
