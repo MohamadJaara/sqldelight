@@ -621,7 +621,26 @@ class QueriesTypeTest {
       |    )
       |  }
       |
+      |  public fun <T : Any> selectForId(
+      |    id: Long,
+      |    mapper: (id: Long, value_: List?) -> T,
+      |    customKeys: List<String>,
+      |  ): Query<T> = SelectForIdQueryWithCustomKeys(id, customKeys) { cursor ->
+      |    mapper(
+      |      cursor.getLong(0)!!,
+      |      cursor.getString(1)?.let { data_Adapter.value_Adapter.decode(it) }
+      |    )
+      |  }
+      |
       |  public fun selectForId(id: Long): Query<SelectForId> = selectForId(id) { id_, value_ ->
+      |    SelectForId(
+      |      id_,
+      |      value_
+      |    )
+      |  }
+      |
+      |  public fun selectForId(id: Long, customKeys: List<String>): Query<SelectForId> =
+      |      selectForIdWithCustomKeys(id, customKeys) { id_, value_ ->
       |    SelectForId(
       |      id_,
       |      value_
@@ -645,6 +664,27 @@ class QueriesTypeTest {
       |    return result
       |  }
       |
+      |  /**
+      |   * @return The number of rows updated.
+      |   */
+      |  public fun insertData(
+      |    id: Long?,
+      |    value_: List?,
+      |    customKeys: List<String>,
+      |  ): QueryResult<Long> {
+      |    val result = driver.execute(${insert.id.withUnderscores}, ""${'"'}
+      |        |INSERT INTO data
+      |        |VALUES (?, ?)
+      |        ""${'"'}.trimMargin(), 2) {
+      |          bindLong(0, id)
+      |          bindString(1, value_?.let { data_Adapter.value_Adapter.encode(it) })
+      |        }
+      |    notifyQueries(${insert.id.withUnderscores}) { emit ->
+      |      customKeys.forEach { emit(it) }
+      |    }
+      |    return result
+      |  }
+      |
       |  private inner class SelectForIdQuery<out T : Any>(
       |    public val id: Long,
       |    mapper: (SqlCursor) -> T,
@@ -655,6 +695,31 @@ class QueriesTypeTest {
       |
       |    override fun removeListener(listener: Query.Listener) {
       |      driver.removeListener("data", listener = listener)
+      |    }
+      |
+      |    override fun <R> execute(mapper: (SqlCursor) -> QueryResult<R>): QueryResult<R> =
+      |        driver.executeQuery(${select.id.withUnderscores}, ""${'"'}
+      |    |SELECT data.id, data.value
+      |    |FROM data
+      |    |WHERE id = ?
+      |    ""${'"'}.trimMargin(), mapper, 1) {
+      |      bindLong(0, id)
+      |    }
+      |
+      |    override fun toString(): String = "Data.sq:selectForId"
+      |  }
+      |
+      |  private inner class SelectForIdQueryWithCustomKeys<out T : Any>(
+      |    public val id: Long,
+      |    public val customKeys: List<String>,
+      |    mapper: (SqlCursor) -> T,
+      |  ) : Query<T>(mapper) {
+      |    override fun addListener(listener: Query.Listener) {
+      |      driver.addListener(*customKeys.toTypedArray(), listener = listener)
+      |    }
+      |
+      |    override fun removeListener(listener: Query.Listener) {
+      |      driver.removeListener(*customKeys.toTypedArray(), listener = listener)
       |    }
       |
       |    override fun <R> execute(mapper: (SqlCursor) -> QueryResult<R>): QueryResult<R> =
@@ -768,6 +833,7 @@ class QueriesTypeTest {
       |import kotlin.Any
       |import kotlin.Long
       |import kotlin.String
+      |import kotlin.collections.List
       |
       |public class SearchQueries(
       |  driver: SqlDriver,
@@ -780,8 +846,27 @@ class QueriesTypeTest {
       |    )
       |  }
       |
+      |  public fun <T : Any> selectOffsets(
+      |    search: String,
+      |    mapper: (id: Long, offsets: String?) -> T,
+      |    customKeys: List<String>,
+      |  ): Query<T> = SelectOffsetsQueryWithCustomKeys(search, customKeys) { cursor ->
+      |    mapper(
+      |      cursor.getLong(0)!!,
+      |      cursor.getString(1)
+      |    )
+      |  }
+      |
       |  public fun selectOffsets(search: String): Query<SelectOffsets> = selectOffsets(search) { id,
       |      offsets ->
+      |    SelectOffsets(
+      |      id,
+      |      offsets
+      |    )
+      |  }
+      |
+      |  public fun selectOffsets(search: String, customKeys: List<String>): Query<SelectOffsets> =
+      |      selectOffsetsWithCustomKeys(search, customKeys) { id, offsets ->
       |    SelectOffsets(
       |      id,
       |      offsets
@@ -805,6 +890,27 @@ class QueriesTypeTest {
       |    return result
       |  }
       |
+      |  /**
+      |   * @return The number of rows updated.
+      |   */
+      |  public fun insertData(
+      |    id: Long?,
+      |    value_: String?,
+      |    customKeys: List<String>,
+      |  ): QueryResult<Long> {
+      |    val result = driver.execute(${insert.id.withUnderscores}, ""${'"'}
+      |        |INSERT INTO search
+      |        |VALUES (?, ?)
+      |        ""${'"'}.trimMargin(), 2) {
+      |          bindLong(0, id)
+      |          bindString(1, value_)
+      |        }
+      |    notifyQueries(${insert.id.withUnderscores}) { emit ->
+      |      customKeys.forEach { emit(it) }
+      |    }
+      |    return result
+      |  }
+      |
       |  private inner class SelectOffsetsQuery<out T : Any>(
       |    public val search: String,
       |    mapper: (SqlCursor) -> T,
@@ -815,6 +921,31 @@ class QueriesTypeTest {
       |
       |    override fun removeListener(listener: Query.Listener) {
       |      driver.removeListener("search", listener = listener)
+      |    }
+      |
+      |    override fun <R> execute(mapper: (SqlCursor) -> QueryResult<R>): QueryResult<R> =
+      |        driver.executeQuery(${offsets.id.withUnderscores}, ""${'"'}
+      |    |SELECT id, offsets(search)
+      |    |FROM search
+      |    |WHERE search MATCH ?
+      |    ""${'"'}.trimMargin(), mapper, 1) {
+      |      bindString(0, search)
+      |    }
+      |
+      |    override fun toString(): String = "Search.sq:selectOffsets"
+      |  }
+      |
+      |  private inner class SelectOffsetsQueryWithCustomKeys<out T : Any>(
+      |    public val search: String,
+      |    public val customKeys: List<String>,
+      |    mapper: (SqlCursor) -> T,
+      |  ) : Query<T>(mapper) {
+      |    override fun addListener(listener: Query.Listener) {
+      |      driver.addListener(*customKeys.toTypedArray(), listener = listener)
+      |    }
+      |
+      |    override fun removeListener(listener: Query.Listener) {
+      |      driver.removeListener(*customKeys.toTypedArray(), listener = listener)
       |    }
       |
       |    override fun <R> execute(mapper: (SqlCursor) -> QueryResult<R>): QueryResult<R> =
@@ -1109,6 +1240,34 @@ class QueriesTypeTest {
       |    } .also {
       |      notifyQueries(${query.id.withUnderscores}) { emit ->
       |        emit("data")
+      |      }
+      |    }
+      |
+      |    override fun toString(): String = "Data.sq:insertAndReturn"
+      |  }
+      |
+      |  private inner class InsertAndReturnQueryWithCustomKeys<out T : Any>(
+      |    public val customKeys: List<String>,
+      |    mapper: (SqlCursor) -> T,
+      |  ) : ExecutableQuery<T>(mapper) {
+      |    override fun addListener(listener: Query.Listener) {
+      |      driver.addListener(*customKeys.toTypedArray(), listener = listener)
+      |    }
+      |
+      |    override fun removeListener(listener: Query.Listener) {
+      |      driver.removeListener(*customKeys.toTypedArray(), listener = listener)
+      |    }
+      |
+      |    override fun <R> execute(mapper: (SqlCursor) -> QueryResult<R>): QueryResult<R> =
+      |        transactionWithResult {
+      |      driver.execute(${query.idForIndex(0).withUnderscores}, ""${'"'}
+      |          |INSERT INTO data (value)
+      |          |  VALUES (NULL)
+      |          ""${'"'}.trimMargin(), 0)
+      |      driver.executeQuery(${query.idForIndex(1).withUnderscores}, ""${'"'}SELECT last_insert_rowid()""${'"'}, mapper, 0)
+      |    } .also {
+      |      notifyQueries(${query.id.withUnderscores}) { emit ->
+      |        customKeys.forEach { emit(it) }
       |      }
       |    }
       |
