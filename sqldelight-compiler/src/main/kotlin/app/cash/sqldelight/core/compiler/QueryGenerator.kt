@@ -2,6 +2,7 @@ package app.cash.sqldelight.core.compiler
 
 import app.cash.sqldelight.core.compiler.integration.javadocText
 import app.cash.sqldelight.core.compiler.model.BindableQuery
+import app.cash.sqldelight.core.compiler.model.CustomKeyExpression
 import app.cash.sqldelight.core.compiler.model.NamedMutator
 import app.cash.sqldelight.core.compiler.model.NamedQuery
 import app.cash.sqldelight.core.lang.ASYNC_RESULT_TYPE
@@ -369,19 +370,36 @@ abstract class QueryGenerator(
   }
 
   protected fun notifyQueriesBlock(): CodeBlock {
-    if (tablesUpdated().isEmpty()) return CodeBlock.builder().build()
-
-    // The list of affected tables:
-    // notifyQueries { emit ->
-    //     emit("players")
-    //     emit("teams")
-    // }
     return buildCodeBlock {
-      beginControlFlow("notifyQueries(%L) { emit ->", query.id)
-      for (table in tablesUpdated().sortedBy(TableNameElement::name)) {
-        add("emit(\"${table.name}\")\n")
+      // Notify custom keys if present
+      val hasCustomKeys = query is NamedMutator && query.customNotifyKeys != null
+
+      if (hasCustomKeys) {
+        query.customNotifyKeys!!.forEach { expr ->
+          val keyString = when (expr) {
+            is CustomKeyExpression.Literal -> {
+              "\"${expr.value}\""
+            }
+            is CustomKeyExpression.Template -> {
+              val parts = expr.parts.map { part ->
+                when (part) {
+                  is CustomKeyExpression.Template.Part.Text -> part.value
+                  is CustomKeyExpression.Template.Part.Parameter -> "\$${part.name}"
+                }
+              }
+              "\"${parts.joinToString("")}\""
+            }
+          }
+          addStatement("$DRIVER_NAME.notifyListeners($keyString)")
+        }
+      } else if (tablesUpdated().isNotEmpty()) {
+        // Only notify table-based listeners when custom keys are not used
+        beginControlFlow("notifyQueries(%L) { emit ->", query.id)
+        for (table in tablesUpdated().sortedBy(TableNameElement::name)) {
+          add("emit(\"${table.name}\")\n")
+        }
+        endControlFlow()
       }
-      endControlFlow()
     }
   }
 

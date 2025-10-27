@@ -432,4 +432,46 @@ class CompilationUnitTests {
       }
     }
   }
+
+  @Test
+  fun `custom query keys flag propagation`() {
+    withTemporaryFixture {
+      gradleFile(
+        """
+        |plugins {
+        |  alias(libs.plugins.kotlin.jvm)
+        |  alias(libs.plugins.sqldelight)
+        |}
+        |
+        |sqldelight {
+        |  databases {
+        |    DefaultDb {
+        |      packageName = "com.sample"
+        |    }
+        |
+        |    CustomKeyDb {
+        |      packageName = "com.sample.customkeys"
+        |      enableCustomQueryKeys = true
+        |    }
+        |  }
+        |}
+        """.trimMargin(),
+      )
+
+      properties().let { properties ->
+        assertThat(properties.databases).hasSize(2)
+
+        val defaultDb = properties.databases.first { it.className == "DefaultDb" }
+        val customKeyDb = properties.databases.first { it.className == "CustomKeyDb" }
+
+        // Verify DefaultDb has custom keys disabled (default)
+        assertThat(defaultDb.packageName).isEqualTo("com.sample")
+        assertThat(defaultDb.enableCustomQueryKeys).isFalse()
+
+        // Verify CustomKeyDb has custom keys enabled
+        assertThat(customKeyDb.packageName).isEqualTo("com.sample.customkeys")
+        assertThat(customKeyDb.enableCustomQueryKeys).isTrue()
+      }
+    }
+  }
 }

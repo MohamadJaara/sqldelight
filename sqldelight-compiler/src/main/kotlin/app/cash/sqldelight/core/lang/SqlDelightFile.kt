@@ -44,6 +44,9 @@ abstract class SqlDelightFile(
   internal val generateAsync
     get() = SqlDelightProjectService.getInstance(project).generateAsync
 
+  internal val enableCustomQueryKeys
+    get() = SqlDelightProjectService.getInstance(project).enableCustomQueryKeys
+
   internal val typeResolver: TypeResolver by lazy {
     var resolver: TypeResolver = dialect.typeResolver(AnsiSqlTypeResolver)
     ServiceLoader.load(SqlDelightModule::class.java, dialect::class.java.classLoader).forEach {
