@@ -25,6 +25,7 @@ data class SqlDelightDatabasePropertiesImpl(
   @Input override val deriveSchemaFromMigrations: Boolean = false,
   @Input override val treatNullAsUnknownForEquality: Boolean = false,
   @Input override val generateAsync: Boolean = false,
+  @Input override val enableCustomQueryKeys: Boolean = false,
   // Only used by intellij plugin to help with resolution.
   @Internal override val rootDirectory: File,
 ) : SqlDelightDatabaseProperties

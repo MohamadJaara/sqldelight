@@ -17,7 +17,9 @@ package app.cash.sqldelight.core.compiler.model
 
 import app.cash.sqldelight.core.lang.SqlDelightQueriesFile
 import app.cash.sqldelight.core.lang.psi.StmtIdentifierMixin
+import app.cash.sqldelight.core.lang.util.CustomKeyAnnotation
 import app.cash.sqldelight.core.lang.util.TableNameElement
+import app.cash.sqldelight.core.lang.util.customKeyAnnotations
 import app.cash.sqldelight.core.lang.util.findChildRecursive
 import app.cash.sqldelight.core.lang.util.referencedTables
 import app.cash.sqldelight.core.lang.util.sqFile
@@ -37,6 +39,39 @@ sealed class NamedMutator(
 
   internal val tablesAffected: Collection<TableNameElement> by lazy {
     tableName.referencedTables()
+  }
+
+  /**
+   * Custom notification keys specified via @NotifyCustomKey annotations.
+   * When present, driver.notifyListeners() will be called with these keys
+   * after the mutation executes.
+   */
+  internal val customNotifyKeys: List<CustomKeyExpression>? by lazy {
+    extractCustomNotifyKeys()
+  }
+
+  private fun extractCustomNotifyKeys(): List<CustomKeyExpression>? {
+    // Check if feature is enabled
+    if (!statement.sqFile().enableCustomQueryKeys) return null
+
+    val annotations = statement.customKeyAnnotations()
+      .filter { it.annotationType == CustomKeyAnnotation.AnnotationType.NOTIFY_KEY }
+
+    if (annotations.isEmpty()) return null
+
+    val expressions = annotations.map { it.expression }
+
+    // Validate that all referenced parameters exist in the mutation
+    val mutationParams = parameters.map { it.name }.toSet()
+    expressions.forEach { expr ->
+      expr.referencedParameters().forEach { paramName ->
+        require(paramName in mutationParams) {
+          "Custom notify key references unknown parameter: $paramName in mutation $name"
+        }
+      }
+    }
+
+    return expressions
   }
 
   class Insert(

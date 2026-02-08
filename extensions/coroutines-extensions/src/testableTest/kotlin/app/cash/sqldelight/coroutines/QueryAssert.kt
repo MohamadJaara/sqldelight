@@ -55,4 +55,8 @@ class QueryAssert(private val cursor: SqlCursor) {
       assertEquals(values[i], cursor.getString(i), "row $row column '$i'")
     }
   }
+
+  fun isEmpty() {
+    assertEquals(0, row, "Expected no rows but had $row rows")
+  }
 }

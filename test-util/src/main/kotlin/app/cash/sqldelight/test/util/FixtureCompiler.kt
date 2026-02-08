@@ -41,6 +41,7 @@ object FixtureCompiler {
     fileName: String = "Test.sq",
     treatNullAsUnknownForEquality: Boolean = false,
     generateAsync: Boolean = false,
+    enableCustomQueryKeys: Boolean = false,
   ): CompilationResult {
     writeSql(sql, temporaryFolder, fileName)
     return compileFixture(
@@ -49,6 +50,7 @@ object FixtureCompiler {
       overrideDialect = overrideDialect,
       treatNullAsUnknownForEquality = treatNullAsUnknownForEquality,
       generateAsync = generateAsync,
+      enableCustomQueryKeys = enableCustomQueryKeys,
     )
   }
 
@@ -73,10 +75,11 @@ object FixtureCompiler {
     dialect: SqlDelightDialect = SqliteDialect(),
     treatNullAsUnknownForEquality: Boolean = false,
     generateAsync: Boolean = false,
+    enableCustomQueryKeys: Boolean = false,
   ): SqlDelightQueriesFile {
     writeSql(sql, temporaryFolder, fileName)
     val errors = mutableListOf<String>()
-    val parser = TestEnvironment(dialect = dialect, treatNullAsUnknownForEquality = treatNullAsUnknownForEquality, generateAsync = generateAsync)
+    val parser = TestEnvironment(dialect = dialect, treatNullAsUnknownForEquality = treatNullAsUnknownForEquality, generateAsync = generateAsync, enableCustomQueryKeys = enableCustomQueryKeys)
     val environment = parser.build(
       temporaryFolder.fixtureRoot().path,
       createAnnotationHolder(errors),
@@ -103,11 +106,12 @@ object FixtureCompiler {
     deriveSchemaFromMigrations: Boolean = false,
     treatNullAsUnknownForEquality: Boolean = false,
     generateAsync: Boolean = false,
+    enableCustomQueryKeys: Boolean = false,
   ): CompilationResult {
     val compilerOutput = mutableMapOf<File, StringBuilder>()
     val errors = mutableListOf<String>()
     val sourceFiles = StringBuilder()
-    val parser = TestEnvironment(outputDirectory, deriveSchemaFromMigrations, treatNullAsUnknownForEquality, overrideDialect, generateAsync)
+    val parser = TestEnvironment(outputDirectory, deriveSchemaFromMigrations, treatNullAsUnknownForEquality, overrideDialect, generateAsync, enableCustomQueryKeys)
     val fixtureRootDir = File(fixtureRoot)
     require(fixtureRootDir.exists()) { "$fixtureRoot does not exist" }
 

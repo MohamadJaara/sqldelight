@@ -22,7 +22,9 @@ import app.cash.sqldelight.core.lang.SqlDelightQueriesFile
 import app.cash.sqldelight.core.lang.cursorGetter
 import app.cash.sqldelight.core.lang.parentAdapter
 import app.cash.sqldelight.core.lang.psi.StmtIdentifierMixin
+import app.cash.sqldelight.core.lang.util.CustomKeyAnnotation
 import app.cash.sqldelight.core.lang.util.TableNameElement
+import app.cash.sqldelight.core.lang.util.customKeyAnnotations
 import app.cash.sqldelight.core.lang.util.name
 import app.cash.sqldelight.core.lang.util.sqFile
 import app.cash.sqldelight.core.lang.util.tablesObserved
@@ -150,6 +152,38 @@ data class NamedQuery(
     } else {
       null
     }
+  }
+
+  /**
+   * Custom query keys specified via @CustomKey annotations.
+   * When present, these override the default table-based keys.
+   */
+  internal val customKeys: List<CustomKeyExpression>? by lazy {
+    extractCustomKeys()
+  }
+
+  private fun extractCustomKeys(): List<CustomKeyExpression>? {
+    // Check if feature is enabled
+    if (!statement.sqFile().enableCustomQueryKeys) return null
+
+    val annotations = statement.customKeyAnnotations()
+      .filter { it.annotationType == CustomKeyAnnotation.AnnotationType.CUSTOM_KEY }
+
+    if (annotations.isEmpty()) return null
+
+    val expressions = annotations.map { it.expression }
+
+    // Validate that all referenced parameters exist in the query
+    val queryParams = parameters.map { it.name }.toSet()
+    expressions.forEach { expr ->
+      expr.referencedParameters().forEach { paramName ->
+        require(paramName in queryParams) {
+          "Custom key references unknown parameter: $paramName in query $name"
+        }
+      }
+    }
+
+    return expressions
   }
 
   internal val customQuerySubtype = "${name.capitalize()}Query"
