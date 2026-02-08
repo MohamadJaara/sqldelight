@@ -36,6 +36,7 @@ abstract class SqlDelightDatabase @Inject constructor(
   abstract val migrationOutputDirectory: DirectoryProperty
   val migrationOutputFileFormat: Property<String> = project.objects.property(String::class.java).convention(".sql")
   val generateAsync: Property<Boolean> = project.objects.property(Boolean::class.java).convention(false)
+  val enableCustomQueryKeys: Property<Boolean> = project.objects.property(Boolean::class.java).convention(false)
 
   val configurationName: String = "${name}DialectClasspath"
 
@@ -177,6 +178,7 @@ abstract class SqlDelightDatabase @Inject constructor(
         deriveSchemaFromMigrations = deriveSchemaFromMigrations.get(),
         treatNullAsUnknownForEquality = treatNullAsUnknownForEquality.get(),
         generateAsync = generateAsync.get(),
+        enableCustomQueryKeys = enableCustomQueryKeys.get(),
       )
     } finally {
       recursionGuard = false
