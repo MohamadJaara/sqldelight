@@ -23,6 +23,7 @@ import app.cash.sqldelight.core.lang.util.customKeyAnnotations
 import app.cash.sqldelight.core.lang.util.findChildRecursive
 import app.cash.sqldelight.core.lang.util.referencedTables
 import app.cash.sqldelight.core.lang.util.sqFile
+import com.alecstrong.sql.psi.core.AnnotationException
 import com.alecstrong.sql.psi.core.psi.SqlAnnotatedElement
 import com.alecstrong.sql.psi.core.psi.SqlDeleteStmtLimited
 import com.alecstrong.sql.psi.core.psi.SqlInsertStmt
@@ -59,19 +60,21 @@ sealed class NamedMutator(
 
     if (annotations.isEmpty()) return null
 
-    val expressions = annotations.map { it.expression }
-
     // Validate that all referenced parameters exist in the mutation
     val mutationParams = parameters.map { it.name }.toSet()
-    expressions.forEach { expr ->
-      expr.referencedParameters().forEach { paramName ->
-        require(paramName in mutationParams) {
-          "Custom notify key references unknown parameter: $paramName in mutation $name"
+    annotations.forEach { annotation ->
+      annotation.expression.referencedParameters().forEach { paramName ->
+        if (paramName !in mutationParams) {
+          throw AnnotationException(
+            msg = "Custom notify key references unknown parameter ':$paramName' in mutation '$name'. " +
+              "Available parameters: ${mutationParams.sorted().joinToString(", ") { ":$it" }}",
+            element = annotation.element,
+          )
         }
       }
     }
 
-    return expressions
+    return annotations.map { it.expression }
   }
 
   class Insert(

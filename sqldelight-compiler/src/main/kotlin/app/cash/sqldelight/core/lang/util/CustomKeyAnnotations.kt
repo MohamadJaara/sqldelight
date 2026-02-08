@@ -16,6 +16,7 @@
 package app.cash.sqldelight.core.lang.util
 
 import app.cash.sqldelight.core.compiler.model.CustomKeyExpression
+import com.alecstrong.sql.psi.core.AnnotationException
 import com.alecstrong.sql.psi.core.psi.SqlAnnotatedElement
 import com.intellij.psi.PsiComment
 import com.intellij.psi.PsiElement
@@ -35,6 +36,7 @@ import com.intellij.psi.impl.source.tree.LeafPsiElement
 data class CustomKeyAnnotation(
   val annotationType: AnnotationType,
   val expression: CustomKeyExpression,
+  val element: PsiElement,
 ) {
   enum class AnnotationType {
     CUSTOM_KEY, // @CustomKey for queries
@@ -70,8 +72,7 @@ fun SqlAnnotatedElement.customKeyAnnotations(): List<CustomKeyAnnotation> {
       }
 
       if (isComment) {
-        val commentText = sibling.text
-        parseCustomKeyAnnotation(commentText)?.let { annotations.add(it) }
+        parseCustomKeyAnnotation(sibling)?.let { annotations.add(it) }
       }
 
       // Stop when we hit something that's not a comment or whitespace
@@ -96,7 +97,8 @@ fun SqlAnnotatedElement.customKeyAnnotations(): List<CustomKeyAnnotation> {
  * @param commentText The full text of the comment
  * @return CustomKeyAnnotation if a valid annotation is found, null otherwise
  */
-private fun parseCustomKeyAnnotation(commentText: String): CustomKeyAnnotation? {
+private fun parseCustomKeyAnnotation(commentElement: PsiElement): CustomKeyAnnotation? {
+  val commentText = commentElement.text
   // Remove comment prefix (-- or /* */)
   val cleaned = commentText
     .replace(Regex("^--\\s*"), "") // Remove leading --
@@ -110,7 +112,8 @@ private fun parseCustomKeyAnnotation(commentText: String): CustomKeyAnnotation? 
       if (expression.isNotEmpty()) {
         CustomKeyAnnotation(
           annotationType = CustomKeyAnnotation.AnnotationType.CUSTOM_KEY,
-          expression = CustomKeyExpression.parse(expression),
+          expression = parseExpression(expression, commentElement),
+          element = commentElement,
         )
       } else {
         null
@@ -121,12 +124,27 @@ private fun parseCustomKeyAnnotation(commentText: String): CustomKeyAnnotation? 
       if (expression.isNotEmpty()) {
         CustomKeyAnnotation(
           annotationType = CustomKeyAnnotation.AnnotationType.NOTIFY_KEY,
-          expression = CustomKeyExpression.parse(expression),
+          expression = parseExpression(expression, commentElement),
+          element = commentElement,
         )
       } else {
         null
       }
     }
     else -> null
+  }
+}
+
+private fun parseExpression(
+  expression: String,
+  element: PsiElement,
+): CustomKeyExpression {
+  return try {
+    CustomKeyExpression.parse(expression)
+  } catch (e: IllegalArgumentException) {
+    throw AnnotationException(
+      msg = e.message ?: "Invalid custom key expression: $expression",
+      element = element,
+    )
   }
 }
