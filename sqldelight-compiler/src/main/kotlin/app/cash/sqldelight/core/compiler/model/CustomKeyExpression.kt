@@ -62,41 +62,66 @@ sealed class CustomKeyExpression {
      */
     fun parse(expression: String): CustomKeyExpression {
       val trimmed = expression.trim()
-      if (!trimmed.contains(':')) {
+      if (!trimmed.contains(':') && !trimmed.contains('\\')) {
         return Literal(trimmed)
       }
 
       val parts = mutableListOf<Template.Part>()
       var currentText = StringBuilder()
       var i = 0
+      var hasParameter = false
 
       while (i < trimmed.length) {
-        if (trimmed[i] == ':') {
-          if (currentText.isNotEmpty()) {
-            parts.add(Template.Part.Text(currentText.toString()))
-            currentText.clear()
+        when (trimmed[i]) {
+          '\\' -> {
+            if (i == trimmed.lastIndex) {
+              throw IllegalArgumentException(
+                "Invalid custom key expression '$trimmed': trailing escape character '\\'",
+              )
+            }
+            val escaped = trimmed[i + 1]
+            if (escaped != ':' && escaped != '\\') {
+              throw IllegalArgumentException(
+                "Invalid custom key expression '$trimmed': unsupported escape sequence '\\$escaped'",
+              )
+            }
+            currentText.append(escaped)
+            i += 2
           }
+          ':' -> {
+            if (currentText.isNotEmpty()) {
+              parts.add(Template.Part.Text(currentText.toString()))
+              currentText = StringBuilder()
+            }
 
-          // Extract parameter name
-          i++ // Skip ':'
-          val paramStart = i
-          while (i < trimmed.length &&
-            (trimmed[i].isLetterOrDigit() || trimmed[i] == '_')
-          ) {
+            // Extract parameter name.
+            i++ // Skip ':'
+            if (i >= trimmed.length || !(trimmed[i].isLetterOrDigit() || trimmed[i] == '_')) {
+              throw IllegalArgumentException(
+                "Invalid custom key expression '$trimmed': ':' must be followed by a parameter name",
+              )
+            }
+            val paramStart = i
+            while (i < trimmed.length && (trimmed[i].isLetterOrDigit() || trimmed[i] == '_')) {
+              i++
+            }
+            val paramName = trimmed.substring(paramStart, i)
+            parts.add(Template.Part.Parameter(paramName))
+            hasParameter = true
+          }
+          else -> {
+            currentText.append(trimmed[i])
             i++
           }
-          val paramName = trimmed.substring(paramStart, i)
-          if (paramName.isNotEmpty()) {
-            parts.add(Template.Part.Parameter(paramName))
-          }
-        } else {
-          currentText.append(trimmed[i])
-          i++
         }
       }
 
       if (currentText.isNotEmpty()) {
         parts.add(Template.Part.Text(currentText.toString()))
+      }
+
+      if (!hasParameter) {
+        return Literal(parts.filterIsInstance<Template.Part.Text>().joinToString("") { it.value })
       }
 
       return Template(parts)

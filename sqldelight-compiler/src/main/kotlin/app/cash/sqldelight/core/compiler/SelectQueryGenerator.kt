@@ -257,7 +257,7 @@ class SelectQueryGenerator(
    * Add the table listener array: arrayOf("table1", "table2")
    */
   private fun queryKeys(tablesObserved: List<TableNameElement>): CodeBlock {
-    return tablesObserved.map { CodeBlock.of("\"${it.name}\"") }
+    return tablesObserved.map { CodeBlock.of("%S", it.name) }
       .joinToCode(", ", prefix = "arrayOf(", suffix = ")")
   }
 
@@ -268,23 +268,7 @@ class SelectQueryGenerator(
    * Example output: arrayOf("conversation_$conversationId")
    */
   private fun customQueryKeys(customKeys: List<CustomKeyExpression>): CodeBlock {
-    val keyExpressions = customKeys.map { expr ->
-      when (expr) {
-        is CustomKeyExpression.Literal -> {
-          CodeBlock.of("\"${expr.value}\"")
-        }
-        is CustomKeyExpression.Template -> {
-          val parts = expr.parts.map { part ->
-            when (part) {
-              is CustomKeyExpression.Template.Part.Text -> part.value
-              is CustomKeyExpression.Template.Part.Parameter -> "\$${part.name}"
-            }
-          }
-          val interpolated = parts.joinToString("")
-          CodeBlock.of("\"$interpolated\"")
-        }
-      }
-    }
+    val keyExpressions = customKeys.map(::customKeyExpressionCode)
 
     return keyExpressions.joinToCode(", ", prefix = "arrayOf(", suffix = ")")
   }
@@ -359,39 +343,24 @@ class SelectQueryGenerator(
     // Generate addListener/removeListener if we have keys (custom or table-based)
     if (query.customKeys != null || !query.tablesObserved.isNullOrEmpty()) {
       val listenerKeys = if (query.customKeys != null) {
-        // Generate interpolated key strings for custom keys
-        query.customKeys!!.map { expr ->
-          when (expr) {
-            is CustomKeyExpression.Literal -> "\"${expr.value}\""
-            is CustomKeyExpression.Template -> {
-              val parts = expr.parts.map { part ->
-                when (part) {
-                  is CustomKeyExpression.Template.Part.Text -> part.value
-                  is CustomKeyExpression.Template.Part.Parameter -> "\$${part.name}"
-                }
-              }
-              "\"${parts.joinToString("")}\""
-            }
-          }
-        }.joinToString()
+        query.customKeys!!.map(::customKeyExpressionCode)
       } else {
-        // Use table names for listener keys
-        query.tablesObserved!!.joinToString { "\"${it.name}\"" }
-      }
+        query.tablesObserved!!.map { CodeBlock.of("%S", it.name) }
+      }.joinToCode(separator = ", ")
 
       queryType
         .addFunction(
           FunSpec.builder("addListener")
             .addModifiers(OVERRIDE)
             .addParameter("listener", QUERY_LISTENER_TYPE)
-            .addStatement("driver.addListener($listenerKeys, listener = listener)")
+            .addStatement("driver.addListener(%L, listener = listener)", listenerKeys)
             .build(),
         )
         .addFunction(
           FunSpec.builder("removeListener")
             .addModifiers(OVERRIDE)
             .addParameter("listener", QUERY_LISTENER_TYPE)
-            .addStatement("driver.removeListener($listenerKeys, listener = listener)")
+            .addStatement("driver.removeListener(%L, listener = listener)", listenerKeys)
             .build(),
         )
     }

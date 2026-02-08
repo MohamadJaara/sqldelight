@@ -29,6 +29,7 @@ import app.cash.sqldelight.core.lang.util.name
 import app.cash.sqldelight.core.lang.util.sqFile
 import app.cash.sqldelight.core.lang.util.tablesObserved
 import app.cash.sqldelight.core.lang.util.type
+import com.alecstrong.sql.psi.core.AnnotationException
 import app.cash.sqldelight.core.psi.SqlDelightStmtClojureStmtList
 import app.cash.sqldelight.dialect.api.IntermediateType
 import app.cash.sqldelight.dialect.api.PrimitiveType.ARGUMENT
@@ -171,19 +172,21 @@ data class NamedQuery(
 
     if (annotations.isEmpty()) return null
 
-    val expressions = annotations.map { it.expression }
-
     // Validate that all referenced parameters exist in the query
     val queryParams = parameters.map { it.name }.toSet()
-    expressions.forEach { expr ->
-      expr.referencedParameters().forEach { paramName ->
-        require(paramName in queryParams) {
-          "Custom key references unknown parameter: $paramName in query $name"
+    annotations.forEach { annotation ->
+      annotation.expression.referencedParameters().forEach { paramName ->
+        if (paramName !in queryParams) {
+          throw AnnotationException(
+            msg = "Custom key references unknown parameter ':$paramName' in query '$name'. " +
+              "Available parameters: ${queryParams.sorted().joinToString(", ") { ":$it" }}",
+            element = annotation.element,
+          )
         }
       }
     }
 
-    return expressions
+    return annotations.map { it.expression }
   }
 
   internal val customQuerySubtype = "${name.capitalize()}Query"

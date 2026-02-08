@@ -4,6 +4,7 @@ import app.cash.sqldelight.test.util.FixtureCompiler
 import app.cash.sqldelight.test.util.fixtureRoot
 import com.google.common.truth.Truth.assertThat
 import java.io.File
+import kotlin.test.assertFailsWith
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -63,7 +64,7 @@ class CustomKeyTest {
     val queriesFile = File(result.outputDirectory, "com/example/MessageQueries.kt")
     assertThat(result.compilerOutput).containsKey(queriesFile)
     val queries = result.compilerOutput[queriesFile].toString()
-    assertThat(queries).contains("""driver.addListener("conversation_${'$'}conversation_id", listener = listener)""")
+    assertThat(queries).contains("""driver.addListener("conversation_" + conversation_id, listener = listener)""")
   }
 
   @Test fun `query with multiple custom keys generates array with multiple keys`() {
@@ -91,7 +92,7 @@ class CustomKeyTest {
     val queriesFile = File(result.outputDirectory, "com/example/MessageQueries.kt")
     assertThat(result.compilerOutput).containsKey(queriesFile)
     val queries = result.compilerOutput[queriesFile].toString()
-    assertThat(queries).contains("""driver.addListener("conversation_${'$'}conversation_id", "user_${'$'}user_id", listener = listener)""")
+    assertThat(queries).contains("""driver.addListener("conversation_" + conversation_id, "user_" + user_id, listener = listener)""")
   }
 
   @Test fun `query without custom key uses table-based keys`() {
@@ -142,7 +143,7 @@ class CustomKeyTest {
     assertThat(result.compilerOutput).containsKey(queriesFile)
     val queries = result.compilerOutput[queriesFile].toString()
     // Should notify custom key
-    assertThat(queries).contains("""driver.notifyListeners("conversation_${'$'}conversation_id")""")
+    assertThat(queries).contains("""driver.notifyListeners("conversation_" + conversation_id)""")
     // Should NOT notify table-based listeners when custom keys are used
     assertThat(queries).doesNotContain("notifyQueries")
   }
@@ -172,14 +173,14 @@ class CustomKeyTest {
     assertThat(result.compilerOutput).containsKey(queriesFile)
     val queries = result.compilerOutput[queriesFile].toString()
     // Should notify both custom keys
-    assertThat(queries).contains("""driver.notifyListeners("conversation_${'$'}conversation_id")""")
-    assertThat(queries).contains("""driver.notifyListeners("message_${'$'}id")""")
+    assertThat(queries).contains("""driver.notifyListeners("conversation_" + conversation_id)""")
+    assertThat(queries).contains("""driver.notifyListeners("message_" + id)""")
     // Should NOT notify table-based listeners when custom keys are used
     assertThat(queries).doesNotContain("notifyQueries")
   }
 
   @Test fun `custom key with invalid parameter reference fails`() {
-    try {
+    val exception = assertFailsWith<Throwable> {
       FixtureCompiler.compileSql(
         """
         |CREATE TABLE message (
@@ -196,13 +197,55 @@ class CustomKeyTest {
         fileName = "Message.sq",
         enableCustomQueryKeys = true,
       )
-      throw AssertionError("Expected compilation to fail with invalid parameter reference")
-    } catch (e: IllegalStateException) {
-      // Should have an error about unknown parameter - check the cause
-      val errorMessage = e.cause?.message ?: e.message ?: ""
-      assertThat(errorMessage).contains("invalid_param")
-      assertThat(errorMessage).contains("selectConversation")
     }
+    val errorMessage = exception.cause?.message ?: exception.message ?: ""
+    assertThat(errorMessage).contains(":invalid_param")
+    assertThat(errorMessage).contains("selectConversation")
+  }
+
+  @Test fun `custom key supports escaped colon literal`() {
+    val result = FixtureCompiler.compileSql(
+      """
+      |CREATE TABLE user (
+      |  id TEXT NOT NULL PRIMARY KEY,
+      |  name TEXT NOT NULL
+      |);
+      |
+      |selectAllUsers:
+      |-- @CustomKey cache\:all_users
+      |SELECT * FROM user;
+      """.trimMargin(),
+      tempFolder,
+      fileName = "User.sq",
+      enableCustomQueryKeys = true,
+    )
+
+    assertThat(result.errors).isEmpty()
+    val queriesFile = File(result.outputDirectory, "com/example/UserQueries.kt")
+    assertThat(result.compilerOutput).containsKey(queriesFile)
+    val queries = result.compilerOutput[queriesFile].toString()
+    assertThat(queries).contains("""arrayOf("cache:all_users")""")
+  }
+
+  @Test fun `custom key with dangling colon fails with source-aware error`() {
+    val exception = assertFailsWith<Throwable> {
+      FixtureCompiler.compileSql(
+        """
+        |CREATE TABLE message (
+        |  id TEXT NOT NULL PRIMARY KEY
+        |);
+        |
+        |selectMessage:
+        |-- @CustomKey message_:
+        |SELECT * FROM message;
+        """.trimMargin(),
+        tempFolder,
+        fileName = "Message.sq",
+        enableCustomQueryKeys = true,
+      )
+    }
+    val errorMessage = exception.cause?.message ?: exception.message ?: ""
+    assertThat(errorMessage).contains("':' must be followed by a parameter name")
   }
 
   @Test fun `custom key preserves parameter interpolation in addListener and removeListener`() {
@@ -231,8 +274,8 @@ class CustomKeyTest {
     // Check that the inner query class has proper listener methods
     assertThat(queries).contains("""addListener""")
     assertThat(queries).contains("""removeListener""")
-    assertThat(queries).contains("""driver.addListener("conversation_${'$'}conversation_id"""")
-    assertThat(queries).contains("""driver.removeListener("conversation_${'$'}conversation_id"""")
+    assertThat(queries).contains("""driver.addListener("conversation_" + conversation_id""")
+    assertThat(queries).contains("""driver.removeListener("conversation_" + conversation_id""")
   }
 
   @Test fun `mutation without custom key uses table-based notification`() {

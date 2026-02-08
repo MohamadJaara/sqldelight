@@ -39,6 +39,7 @@ import com.squareup.kotlinpoet.CodeBlock
 import com.squareup.kotlinpoet.FunSpec
 import com.squareup.kotlinpoet.NameAllocator
 import com.squareup.kotlinpoet.buildCodeBlock
+import com.squareup.kotlinpoet.joinToCode
 
 abstract class QueryGenerator(
   private val query: BindableQuery,
@@ -376,21 +377,7 @@ abstract class QueryGenerator(
 
       if (hasCustomKeys) {
         query.customNotifyKeys!!.forEach { expr ->
-          val keyString = when (expr) {
-            is CustomKeyExpression.Literal -> {
-              "\"${expr.value}\""
-            }
-            is CustomKeyExpression.Template -> {
-              val parts = expr.parts.map { part ->
-                when (part) {
-                  is CustomKeyExpression.Template.Part.Text -> part.value
-                  is CustomKeyExpression.Template.Part.Parameter -> "\$${part.name}"
-                }
-              }
-              "\"${parts.joinToString("")}\""
-            }
-          }
-          addStatement("$DRIVER_NAME.notifyListeners($keyString)")
+          addStatement("$DRIVER_NAME.notifyListeners(%L)", customKeyExpressionCode(expr))
         }
       } else if (tablesUpdated().isNotEmpty()) {
         // Only notify table-based listeners when custom keys are not used
@@ -399,6 +386,27 @@ abstract class QueryGenerator(
           add("emit(\"${table.name}\")\n")
         }
         endControlFlow()
+      }
+    }
+  }
+
+  protected fun customKeyExpressionCode(expression: CustomKeyExpression): CodeBlock {
+    return when (expression) {
+      is CustomKeyExpression.Literal -> CodeBlock.of("%S", expression.value)
+      is CustomKeyExpression.Template -> {
+        val parts = expression.parts.mapNotNull { part ->
+          when (part) {
+            is CustomKeyExpression.Template.Part.Text -> {
+              if (part.value.isEmpty()) null else CodeBlock.of("%S", part.value)
+            }
+            is CustomKeyExpression.Template.Part.Parameter -> CodeBlock.of("%N", part.name)
+          }
+        }
+        when (parts.size) {
+          0 -> CodeBlock.of("%S", "")
+          1 -> parts.single()
+          else -> parts.joinToCode(separator = " + ")
+        }
       }
     }
   }
