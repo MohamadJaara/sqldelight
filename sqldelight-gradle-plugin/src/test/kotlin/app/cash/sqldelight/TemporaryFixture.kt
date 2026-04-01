@@ -93,6 +93,7 @@ internal fun properties(fixtureRoot: File): SqlDelightPropertiesFileImpl {
         deriveSchemaFromMigrations = it.deriveSchemaFromMigrations,
         treatNullAsUnknownForEquality = it.treatNullAsUnknownForEquality,
         generateAsync = it.generateAsync,
+        expandSelectStar = false,
         enableCustomQueryKeys = it.enableCustomQueryKeys,
         rootDirectory = it.rootDirectory,
       )

@@ -43,6 +43,7 @@ internal class TestEnvironment(
         override val treatNullAsUnknownForEquality = this@TestEnvironment.treatNullAsUnknownForEquality
         override val rootDirectory = File(root)
         override val generateAsync: Boolean = this@TestEnvironment.generateAsync
+        override val expandSelectStar: Boolean = false
         override val enableCustomQueryKeys: Boolean = this@TestEnvironment.enableCustomQueryKeys
       },
       dialect = dialect,
